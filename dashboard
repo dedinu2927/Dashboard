@@ -1,0 +1,374 @@
+
+import React from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
+import { FileText, CheckCircle, Activity, AlertTriangle, XCircle, RefreshCw } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { isPast, differenceInMonths, isFuture, addMonths } from "date-fns";
+
+import KPICard from "../components/dashboard/KPICard";
+import StatusProyekChart from "../components/dashboard/StatusProyekChart";
+import PilarCard from "../components/dashboard/PilarCard";
+import PilarComparison from "../components/dashboard/PilarComparison";
+import ExpiredAnalysis from "../components/dashboard/ExpiredAnalysis";
+
+export default function Dashboard() {
+  const { data: spkList, isLoading: loadingSPK } = useQuery({
+    queryKey: ['spk'],
+    queryFn: () => base44.entities.SPK.list(),
+    initialData: [],
+  });
+
+  const totalSPK = spkList.length;
+  const spkSelesai = spkList.filter(spk => spk.status === 'done').length;
+  const spkAktif = spkList.filter(spk => spk.status === 'on_progress').length;
+  const spkExpired = spkList.filter(spk => 
+    spk.deadline && 
+    isPast(new Date(spk.deadline)) && 
+    spk.status !== 'done'
+  ).length;
+
+  // User vs Vendor KPIs
+  const spkUser = spkList.filter(spk => spk.user_vendor === 'user');
+  const spkVendor = spkList.filter(spk => spk.user_vendor === 'vendor');
+  const totalNilaiUser = spkUser.reduce((sum, spk) => sum + (spk.nilai_kontrak || 0), 0);
+  const totalNilaiVendor = spkVendor.reduce((sum, spk) => sum + (spk.nilai_kontrak || 0), 0);
+
+  // Status Proyek KPIs
+  const spkProyekSelesai = spkList.filter(spk => spk.status_proyek === 'proyek_selesai').length;
+  const spkPotensiTidakDiperpanjang = spkList.filter(spk => spk.status_proyek === 'potensi_tidak_diperpanjang').length;
+  const spkPotensiDiperpanjang = spkList.filter(spk => spk.status_proyek === 'potensi_diperpanjang').length;
+
+  const statusProyekData = {
+    proyek_selesai: spkProyekSelesai,
+    potensi_tidak_diperpanjang: spkPotensiTidakDiperpanjang,
+    potensi_diperpanjang: spkPotensiDiperpanjang
+  };
+
+  // Group SPK by Pilar
+  const spkByPilar = {
+    network: spkList.filter(spk => spk.pilar === 'network'),
+    hardware: spkList.filter(spk => spk.pilar === 'hardware'),
+    omnichannel: spkList.filter(spk => spk.pilar === 'omnichannel'),
+    manpower: spkList.filter(spk => spk.pilar === 'manpower')
+  };
+
+  // Group by Pilar and User/Vendor
+  const spkByPilarUser = {
+    network: spkUser.filter(spk => spk.pilar === 'network'),
+    hardware: spkUser.filter(spk => spk.pilar === 'hardware'),
+    omnichannel: spkUser.filter(spk => spk.pilar === 'omnichannel'),
+    manpower: spkUser.filter(spk => spk.pilar === 'manpower')
+  };
+
+  const spkByPilarVendor = {
+    network: spkVendor.filter(spk => spk.pilar === 'network'),
+    hardware: spkVendor.filter(spk => spk.pilar === 'hardware'),
+    omnichannel: spkVendor.filter(spk => spk.pilar === 'omnichannel'),
+    manpower: spkVendor.filter(spk => spk.pilar === 'manpower')
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Welcome Section */}
+      <div className="bg-gradient-to-r from-[#1a73e8] to-[#1557b0] rounded-xl p-6 text-white shadow-lg">
+        <h2 className="text-2xl font-bold mb-2">Selamat Datang di Monitoring OSC</h2>
+        <p className="text-blue-100">Kelola SPK dengan mudah dan pantau progress secara real-time</p>
+      </div>
+
+      {/* KPI Cards - Row 1 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {loadingSPK ? (
+          <>
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+          </>
+        ) : (
+          <>
+            <KPICard
+              title="Total SPK"
+              value={totalSPK}
+              icon={FileText}
+              color="blue"
+            />
+            <KPICard
+              title="SPK Selesai"
+              value={spkSelesai}
+              icon={CheckCircle}
+              color="green"
+            />
+            <KPICard
+              title="SPK Aktif"
+              value={spkAktif}
+              icon={Activity}
+              color="yellow"
+            />
+            <KPICard
+              title="SPK Terlambat"
+              value={spkExpired}
+              icon={AlertTriangle}
+              color="red"
+            />
+          </>
+        )}
+      </div>
+
+      {/* KPI Cards - Row 2: User vs Vendor */}
+      <div>
+        <h3 className="text-xl font-bold text-[#202124] mb-4 flex items-center gap-2">
+          <div className="w-1 h-6 bg-[#1a73e8] rounded-full"></div>
+          Perbandingan User vs Vendor
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {loadingSPK ? (
+            <>
+              <Skeleton className="h-40" />
+              <Skeleton className="h-40" />
+            </>
+          ) : (
+            <>
+              <Card className="border border-indigo-200 bg-indigo-50">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="font-semibold text-indigo-900 text-lg">SPK User</h4>
+                    <Badge className="bg-indigo-600 text-white">{spkUser.length} SPK</Badge>
+                  </div>
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-sm text-indigo-700">Total Nilai Kontrak</p>
+                      <p className="text-2xl font-bold text-indigo-900">
+                        Rp {totalNilaiUser.toLocaleString('id-ID')}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border border-teal-200 bg-teal-50">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="font-semibold text-teal-900 text-lg">SPK Vendor</h4>
+                    <Badge className="bg-teal-600 text-white">{spkVendor.length} SPK</Badge>
+                  </div>
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-sm text-teal-700">Total Nilai Kontrak</p>
+                      <p className="text-2xl font-bold text-teal-900">
+                        Rp {totalNilaiVendor.toLocaleString('id-ID')}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* KPI Cards - Row 3: Status Proyek */}
+      <div>
+        <h3 className="text-xl font-bold text-[#202124] mb-4 flex items-center gap-2">
+          <div className="w-1 h-6 bg-[#1a73e8] rounded-full"></div>
+          Status Perpanjangan Proyek
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {loadingSPK ? (
+            <>
+              <Skeleton className="h-32" />
+              <Skeleton className="h-32" />
+              <Skeleton className="h-32" />
+            </>
+          ) : (
+            <>
+              <KPICard
+                title="Proyek Selesai"
+                value={spkProyekSelesai}
+                icon={CheckCircle}
+                color="green"
+              />
+              <KPICard
+                title="Potensi Tidak Diperpanjang"
+                value={spkPotensiTidakDiperpanjang}
+                icon={XCircle}
+                color="red"
+              />
+              <KPICard
+                title="Potensi Diperpanjang"
+                value={spkPotensiDiperpanjang}
+                icon={RefreshCw}
+                color="blue"
+              />
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Pilar Section */}
+      <div>
+        <h3 className="text-xl font-bold text-[#202124] mb-4 flex items-center gap-2">
+          <div className="w-1 h-6 bg-[#1a73e8] rounded-full"></div>
+          Overview per Pilar
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {loadingSPK ? (
+            <>
+              <Skeleton className="h-80" />
+              <Skeleton className="h-80" />
+              <Skeleton className="h-80" />
+              <Skeleton className="h-80" />
+            </>
+          ) : (
+            <>
+              <PilarCard pilar="network" data={spkByPilar.network} />
+              <PilarCard pilar="hardware" data={spkByPilar.hardware} />
+              <PilarCard pilar="omnichannel" data={spkByPilar.omnichannel} />
+              <PilarCard pilar="manpower" data={spkByPilar.manpower} />
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Pilar Section - User */}
+      <div>
+        <h3 className="text-xl font-bold text-[#202124] mb-4 flex items-center gap-2">
+          <div className="w-1 h-6 bg-indigo-600 rounded-full"></div>
+          Overview per Pilar - User
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {loadingSPK ? (
+            <>
+              <Skeleton className="h-80" />
+              <Skeleton className="h-80" />
+              <Skeleton className="h-80" />
+              <Skeleton className="h-80" />
+            </>
+          ) : (
+            <>
+              <PilarCard pilar="network" data={spkByPilarUser.network} />
+              <PilarCard pilar="hardware" data={spkByPilarUser.hardware} />
+              <PilarCard pilar="omnichannel" data={spkByPilarUser.omnichannel} />
+              <PilarCard pilar="manpower" data={spkByPilarUser.manpower} />
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Pilar Section - Vendor */}
+      <div>
+        <h3 className="text-xl font-bold text-[#202124] mb-4 flex items-center gap-2">
+          <div className="w-1 h-6 bg-teal-600 rounded-full"></div>
+          Overview per Pilar - Vendor
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {loadingSPK ? (
+            <>
+              <Skeleton className="h-80" />
+              <Skeleton className="h-80" />
+              <Skeleton className="h-80" />
+              <Skeleton className="h-80" />
+            </>
+          ) : (
+            <>
+              <PilarCard pilar="network" data={spkByPilarVendor.network} />
+              <PilarCard pilar="hardware" data={spkByPilarVendor.hardware} />
+              <PilarCard pilar="omnichannel" data={spkByPilarVendor.omnichannel} />
+              <PilarCard pilar="manpower" data={spkByPilarVendor.manpower} />
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Expired Analysis */}
+      <div>
+        <h3 className="text-xl font-bold text-[#202124] mb-4 flex items-center gap-2">
+          <div className="w-1 h-6 bg-red-500 rounded-full"></div>
+          Analisis SPK Expired
+        </h3>
+        {loadingSPK ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Skeleton className="h-96" />
+            <Skeleton className="h-96" />
+          </div>
+        ) : (
+          <ExpiredAnalysis spkList={spkList} />
+        )}
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {loadingSPK ? (
+          <>
+            <Skeleton className="h-96" />
+            <Skeleton className="h-96" />
+          </>
+        ) : (
+          <>
+            <StatusProyekChart data={statusProyekData} />
+            <PilarComparison data={spkByPilar} />
+          </>
+        )}
+      </div>
+
+      {/* Recent Activity */}
+      <div className="bg-white border border-[#dadce0] rounded-lg shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-[#202124] mb-4">SPK Terbaru</h3>
+        <div className="space-y-3">
+          {spkList.slice(0, 5).map((spk) => {
+            const pilarConfig = {
+              network: { label: 'Network', color: 'bg-blue-100 text-blue-700' },
+              hardware: { label: 'Hardware', color: 'bg-purple-100 text-purple-700' },
+              omnichannel: { label: 'Omnichannel', color: 'bg-green-100 text-green-700' },
+              manpower: { label: 'Manpower', color: 'bg-orange-100 text-orange-700' }
+            };
+
+            return (
+              <div key={spk.id} className="flex items-center justify-between p-3 bg-[#f8f9fa] rounded-lg hover:shadow-md transition-shadow">
+                <div className="flex-1">
+                  <p className="font-medium text-[#202124]">{spk.nama_proyek}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-sm text-[#5f6368]">{spk.nama_customer}</p>
+                    {spk.nilai_kontrak && (
+                      <>
+                        <span className="text-[#5f6368]">•</span>
+                        <p className="text-sm font-semibold text-[#1a73e8]">
+                          Rp {spk.nilai_kontrak.toLocaleString('id-ID')}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {spk.pilar && (
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${pilarConfig[spk.pilar]?.color || 'bg-gray-100 text-gray-700'}`}>
+                      {pilarConfig[spk.pilar]?.label || spk.pilar}
+                    </span>
+                  )}
+                  {spk.user_vendor && (
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      spk.user_vendor === 'user' ? 'bg-indigo-100 text-indigo-700' : 
+                      spk.user_vendor === 'vendor' ? 'bg-teal-100 text-teal-700' : 
+                      'bg-gray-100 text-gray-700'
+                    }`}>
+                      {spk.user_vendor === 'user' ? 'User' : 'Vendor'}
+                    </span>
+                  )}
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    spk.status === 'done' ? 'bg-green-100 text-green-700' :
+                    spk.status === 'on_progress' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-red-100 text-red-700'
+                  }`}>
+                    {spk.status === 'done' ? 'Selesai' : spk.status === 'on_progress' ? 'On Progress' : 'Draft'}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
